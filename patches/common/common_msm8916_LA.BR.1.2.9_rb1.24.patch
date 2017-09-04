@@ -1,3 +1,1531 @@
+From d6aaf0fbd6005f6ca73534959aaad3d03a0c9dd7 Mon Sep 17 00:00:00 2001
+From: Mohammed Javid <mjavid@codeaurora.org>
+Date: Sun, 25 Jun 2017 01:01:55 +0530
+Subject: msm:ipa: Fix to kasan use-after-free issue
+
+Added mutex lock to query rt table function also to sync
+with other ioctl calls in ipa.
+Change-Id: I65d46c0ef28b5e6260c92473fd15e9763de20146
+Acked-by: Ashok Vuyyuru <avuyyuru@qti.qualcomm.com>
+Signed-off-by: Mohammed Javid <mjavid@codeaurora.org>
+---
+ drivers/platform/msm/ipa/ipa_rt.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/platform/msm/ipa/ipa_rt.c b/drivers/platform/msm/ipa/ipa_rt.c
+index ea1982b..abe9321 100644
+--- a/drivers/platform/msm/ipa/ipa_rt.c
++++ b/drivers/platform/msm/ipa/ipa_rt.c
+@@ -791,12 +791,16 @@ int ipa_query_rt_index(struct ipa_ioc_get_rt_tbl_indx *in)
+ 		return -EINVAL;
+ 	}
+ 
++	mutex_lock(&ipa_ctx->lock);
+ 	/* check if this table exists */
+ 	entry = __ipa_find_rt_tbl(in->ip, in->name);
+-	if (!entry)
++	if (!entry){
++		mutex_unlock(&ipa_ctx->lock);
+ 		return -EFAULT;
++	}
+ 
+ 	in->idx  = entry->idx;
++	mutex_unlock(&ipa_ctx->lock);
+ 	return 0;
+ }
+ 
+-- 
+cgit v1.1
+
+From 4baa53de879415a27d36b6dce1f8292878b70ad4 Mon Sep 17 00:00:00 2001
+From: mohamed sunfeer <msunfeer@codeaurora.org>
+Date: Wed, 21 Jun 2017 15:21:58 +0530
+Subject: compat_qcedev: Fix accessing userspace memory in kernel space
+
+Use put_user API to write the data to userspace from kernel
+space to avoid accessing userspace memory directly in
+kernel space.
+
+Change-Id: I4dd73872ab8c374793268cef2b9a2dfccf3454c9
+Signed-off-by: mohamed sunfeer <msunfeer@codeaurora.org>
+---
+ drivers/crypto/msm/compat_qcedev.c | 10 +---------
+ 1 file changed, 1 insertion(+), 9 deletions(-)
+
+diff --git a/drivers/crypto/msm/compat_qcedev.c b/drivers/crypto/msm/compat_qcedev.c
+index 97ae990..08a764e 100644
+--- a/drivers/crypto/msm/compat_qcedev.c
++++ b/drivers/crypto/msm/compat_qcedev.c
+@@ -1,7 +1,7 @@
+ /*
+  * QTI CE 32-bit compatibility syscall for 64-bit systems
+  *
+- * Copyright (c) 2014, The Linux Foundation. All rights reserved.
++ * Copyright (c) 2014, 2017, The Linux Foundation. All rights reserved.
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 and
+@@ -97,7 +97,6 @@ static int compat_get_qcedev_vbuf_info(
+ 
+ 	for (i = 0; i < QCEDEV_MAX_BUFFERS; i++) {
+ 		err |= get_user(vaddr, &vbuf32->src[i].vaddr);
+-		vbuf->src[i].vaddr = NULL;
+ 		err |= put_user(vaddr, (compat_uptr_t *)&vbuf->src[i].vaddr);
+ 		err |= get_user(len, &vbuf32->src[i].len);
+ 		err |= put_user(len, &vbuf->src[i].len);
+@@ -105,7 +104,6 @@ static int compat_get_qcedev_vbuf_info(
+ 
+ 	for (i = 0; i < QCEDEV_MAX_BUFFERS; i++) {
+ 		err |= get_user(vaddr, &vbuf32->dst[i].vaddr);
+-		vbuf->dst[i].vaddr = NULL;
+ 		err |= put_user(vaddr, (compat_uptr_t *)&vbuf->dst[i].vaddr);
+ 		err |= get_user(len, &vbuf32->dst[i].len);
+ 		err |= put_user(len, &vbuf->dst[i].len);
+@@ -123,7 +121,6 @@ static int compat_put_qcedev_vbuf_info(
+ 
+ 	for (i = 0; i < QCEDEV_MAX_BUFFERS; i++) {
+ 		err |= get_user(vaddr, (compat_uptr_t *)&vbuf->src[i].vaddr);
+-		vbuf32->src[i].vaddr = 0;
+ 		err |= put_user(vaddr, &vbuf32->src[i].vaddr);
+ 		err |= get_user(len, &vbuf->src[i].len);
+ 		err |= put_user(len, &vbuf32->src[i].len);
+@@ -131,7 +128,6 @@ static int compat_put_qcedev_vbuf_info(
+ 
+ 	for (i = 0; i < QCEDEV_MAX_BUFFERS; i++) {
+ 		err |= get_user(vaddr, (compat_uptr_t *)&vbuf->dst[i].vaddr);
+-		vbuf32->dst[i].vaddr = 0;
+ 		err |= put_user(vaddr, &vbuf32->dst[i].vaddr);
+ 		err |= get_user(len, &vbuf->dst[i].len);
+ 		err |= put_user(len, &vbuf32->dst[i].len);
+@@ -276,7 +272,6 @@ static int compat_get_qcedev_sha_op_req(
+ 
+ 	for (i = 0; i < QCEDEV_MAX_BUFFERS; i++) {
+ 		err |= get_user(vaddr, &data32->data[i].vaddr);
+-		data->data[i].vaddr = 0;
+ 		err |= put_user(vaddr, (compat_uptr_t *)&data->data[i].vaddr);
+ 		err |= get_user(len, &data32->data[i].len);
+ 		err |= put_user(len, &data->data[i].len);
+@@ -295,7 +290,6 @@ static int compat_get_qcedev_sha_op_req(
+ 	err |= get_user(diglen, &data32->diglen);
+ 	err |= put_user(diglen, &data->diglen);
+ 	err |= get_user(authkey, &data32->authkey);
+-	data->authkey = NULL;
+ 	err |= put_user(authkey, (compat_uptr_t *)&data->authkey);
+ 	err |= get_user(authklen, &data32->authklen);
+ 	err |= put_user(authklen, &data->authklen);
+@@ -322,7 +316,6 @@ static int compat_put_qcedev_sha_op_req(
+ 
+ 	for (i = 0; i < QCEDEV_MAX_BUFFERS; i++) {
+ 		err |= get_user(vaddr, (compat_uptr_t *)&data->data[i].vaddr);
+-		data32->data[i].vaddr = 0;
+ 		err |= put_user(vaddr, &data32->data[i].vaddr);
+ 		err |= get_user(len, &data->data[i].len);
+ 		err |= put_user(len, &data32->data[i].len);
+@@ -341,7 +334,6 @@ static int compat_put_qcedev_sha_op_req(
+ 	err |= get_user(diglen, &data->diglen);
+ 	err |= put_user(diglen, &data32->diglen);
+ 	err |= get_user(authkey, (compat_uptr_t *)&data->authkey);
+-	data32->authkey = 0;
+ 	err |= put_user(authkey, &data32->authkey);
+ 	err |= get_user(authklen, &data->authklen);
+ 	err |= put_user(authklen, &data32->authklen);
+-- 
+cgit v1.1
+
+From d2a73db6c9d842112defaa2425957089746cbdd4 Mon Sep 17 00:00:00 2001
+From: raghavendra ambadas <rambad@codeaurora.org>
+Date: Wed, 5 Jul 2017 11:08:30 +0530
+Subject: msm: mdss: Move mutex lock outside esd status check
+
+Release the mutex immediatly after wait for dma done,
+this change will make sure there is no wait for commit
+thread while esd status check is in progress.
+
+Change-Id: I56a9c0f19d9b026159f1588b32dfd66de74e3020
+Signed-off-by: Raghavendra Ambadas <rambad@codeaurora.org>
+---
+ drivers/video/msm/mdss/dsi_status_v2.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/video/msm/mdss/dsi_status_v2.c b/drivers/video/msm/mdss/dsi_status_v2.c
+index 58e2402..776093c 100644
+--- a/drivers/video/msm/mdss/dsi_status_v2.c
++++ b/drivers/video/msm/mdss/dsi_status_v2.c
+@@ -1,4 +1,4 @@
+-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
++/* Copyright (c) 2013-2015, 2017, The Linux Foundation. All rights reserved.
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 and
+@@ -82,12 +82,12 @@ void mdp3_check_dsi_ctrl_status(struct work_struct *work,
+ 
+ 	if (mdp3_session->wait_for_dma_done)
+ 		ret = mdp3_session->wait_for_dma_done(mdp3_session);
++	mutex_unlock(&mdp3_session->lock);
+ 
+ 	if (!ret)
+ 		ret = ctrl_pdata->check_status(ctrl_pdata);
+ 	else
+ 		pr_err("%s: wait_for_dma_done error\n", __func__);
+-	mutex_unlock(&mdp3_session->lock);
+ 
+ 	if (mdss_fb_is_power_on_interactive(pdsi_status->mfd)) {
+ 		if (ret > 0) {
+-- 
+cgit v1.1
+
+From e7c48823942b27a4580be695ff8685c940be3c30 Mon Sep 17 00:00:00 2001
+From: Brahmaji K <bkomma@codeaurora.org>
+Date: Tue, 27 Jun 2017 19:27:37 +0530
+Subject: crypto: msm: Fix several race condition issues in crypto drivers
+
+Check areq before referencing, replace xchg to automic_xchg and
+verify return values of set key during SHA operations.
+
+Change-Id: Ife01372ba4990bfefe52b82db4ab33ef76190944
+Signed-off-by: Brahmaji K <bkomma@codeaurora.org>
+Signed-off-by: Paresh Purabhiya <ppurab@codeaurora.org>
+---
+ drivers/crypto/msm/qce50.c   |  4 ++++
+ drivers/crypto/msm/qcrypto.c | 14 ++++++++++----
+ 2 files changed, 14 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/crypto/msm/qce50.c b/drivers/crypto/msm/qce50.c
+index 09bcfde..30dc040 100644
+--- a/drivers/crypto/msm/qce50.c
++++ b/drivers/crypto/msm/qce50.c
+@@ -2056,6 +2056,10 @@ static int _sha_complete(struct qce_device *pce_dev)
+ 	uint32_t result_dump_status;
+ 
+ 	areq = (struct ahash_request *) pce_dev->areq;
++	if (!areq) {
++		pr_err("sha operation error. areq is NULL\n");
++		return -ENXIO;
++	}
+ 	qce_dma_unmap_sg(pce_dev->pdev, areq->src, pce_dev->src_nents,
+ 				DMA_TO_DEVICE);
+ 	memcpy(digest, (char *)(&pce_dev->ce_sps.result->auth_iv[0]),
+diff --git a/drivers/crypto/msm/qcrypto.c b/drivers/crypto/msm/qcrypto.c
+index d93939c..7a338eb 100644
+--- a/drivers/crypto/msm/qcrypto.c
++++ b/drivers/crypto/msm/qcrypto.c
+@@ -3506,6 +3506,7 @@ static int _sha1_hmac_setkey(struct crypto_ahash *tfm, const u8 *key,
+ 							unsigned int len)
+ {
+ 	struct qcrypto_sha_ctx *sha_ctx = crypto_tfm_ctx(&tfm->base);
++	int ret = 0;
+ 	memset(&sha_ctx->authkey[0], 0, SHA1_BLOCK_SIZE);
+ 	if (len <= SHA1_BLOCK_SIZE) {
+ 		memcpy(&sha_ctx->authkey[0], key, len);
+@@ -3513,16 +3514,19 @@ static int _sha1_hmac_setkey(struct crypto_ahash *tfm, const u8 *key,
+ 	} else {
+ 		sha_ctx->alg = QCE_HASH_SHA1;
+ 		sha_ctx->diglen = SHA1_DIGEST_SIZE;
+-		_sha_hmac_setkey(tfm, key, len);
++		ret = _sha_hmac_setkey(tfm, key, len);
++		if (ret)
++			pr_err("SHA1 hmac setkey failed\n");
+ 		sha_ctx->authkey_in_len = SHA1_BLOCK_SIZE;
+ 	}
+-	return 0;
++	return ret;
+ }
+ 
+ static int _sha256_hmac_setkey(struct crypto_ahash *tfm, const u8 *key,
+ 							unsigned int len)
+ {
+ 	struct qcrypto_sha_ctx *sha_ctx = crypto_tfm_ctx(&tfm->base);
++	int ret = 0;
+ 
+ 	memset(&sha_ctx->authkey[0], 0, SHA256_BLOCK_SIZE);
+ 	if (len <= SHA256_BLOCK_SIZE) {
+@@ -3531,11 +3535,13 @@ static int _sha256_hmac_setkey(struct crypto_ahash *tfm, const u8 *key,
+ 	} else {
+ 		sha_ctx->alg = QCE_HASH_SHA256;
+ 		sha_ctx->diglen = SHA256_DIGEST_SIZE;
+-		_sha_hmac_setkey(tfm, key, len);
++		ret = _sha_hmac_setkey(tfm, key, len);
++		if (ret)
++			pr_err("SHA256 hmac setkey failed\n");
+ 		sha_ctx->authkey_in_len = SHA256_BLOCK_SIZE;
+ 	}
+ 
+-	return 0;
++	return ret;
+ }
+ 
+ static int _sha_hmac_init_ihash(struct ahash_request *req,
+-- 
+cgit v1.1
+
+From bdaa311e16084f539cf39870641ee686f1d80bbd Mon Sep 17 00:00:00 2001
+From: Kuogee Hsieh <khsieh@codeaurora.org>
+Date: Fri, 17 Oct 2014 10:18:47 -0700
+Subject: msm: mdss: add support of border area
+
+Add border_x_off and border_y_off to track the
+left/right/top/bottom border parameters defined
+at panel dtsi file. Adding border_x_off and
+border_y_off to pipe's destination x and y so that
+border can be formed during blending operation at
+mixer.
+
+Change-Id: I29673df30318c7d9064adae996da62823db3230d
+Signed-off-by: Kuogee Hsieh <khsieh@codeaurora.org>
+---
+ drivers/video/msm/mdss/mdp3_ctrl.c           | 16 ++++++--
+ drivers/video/msm/mdss/mdp3_dma.c            |  4 +-
+ drivers/video/msm/mdss/mdp3_dma.h            |  3 +-
+ drivers/video/msm/mdss/mdss_dsi_host.c       |  7 +++-
+ drivers/video/msm/mdss/mdss_dsi_panel.c      | 16 ++++++--
+ drivers/video/msm/mdss/mdss_mdp.h            | 17 ++++++++-
+ drivers/video/msm/mdss/mdss_mdp_ctl.c        | 55 +++++++++++++++++++++++-----
+ drivers/video/msm/mdss/mdss_mdp_intf_video.c | 16 +++++---
+ drivers/video/msm/mdss/mdss_mdp_overlay.c    |  7 +++-
+ drivers/video/msm/mdss/mdss_panel.h          | 15 ++++++--
+ drivers/video/msm/mdss/msm_mdss_io_8974.c    |  5 +--
+ 11 files changed, 124 insertions(+), 37 deletions(-)
+
+diff --git a/drivers/video/msm/mdss/mdp3_ctrl.c b/drivers/video/msm/mdss/mdp3_ctrl.c
+index 92fb0e3..cb9b469 100755
+--- a/drivers/video/msm/mdss/mdp3_ctrl.c
++++ b/drivers/video/msm/mdss/mdp3_ctrl.c
+@@ -583,6 +583,13 @@ static int mdp3_ctrl_intf_init(struct msm_fb_data_type *mfd,
+ 	int vsync_period = v_front_porch + v_back_porch + h + v_pulse_width;
+ 	struct mdp3_session_data *mdp3_session;
+ 
++	int border_top = p->lcdc.border_top;
++	int border_bottom = p->lcdc.border_bottom;
++	int border_left = p->lcdc.border_left;
++	int border_right = p->lcdc.border_right;
++
++	hsync_period += border_left + border_right;
++	vsync_period += border_top + border_bottom;
+ 	mdp3_session = (struct mdp3_session_data *)mfd->mdp.private1;
+ 	vsync_period *= hsync_period;
+ 
+@@ -599,17 +606,18 @@ static int mdp3_ctrl_intf_init(struct msm_fb_data_type *mfd,
+ 			(v_back_porch + v_pulse_width) * hsync_period;
+ 		video->display_end_y =
+ 			vsync_period - v_front_porch * hsync_period - 1;
+-		video->active_start_x = video->display_start_x;
+-		video->active_end_x = video->display_end_x;
++		video->active_start_x = video->display_start_x + border_left;
++		video->active_end_x = video->display_end_x - border_right;
+ 		video->active_h_enable = true;
+-		video->active_start_y = video->display_start_y;
+-		video->active_end_y = video->display_end_y;
++		video->active_start_y = video->display_start_y + (border_top * hsync_period);
++		video->active_end_y = video->display_end_y - (border_bottom * hsync_period);
+ 		video->active_v_enable = true;
+ 		video->hsync_skew = h_sync_skew;
+ 		video->hsync_polarity = 1;
+ 		video->vsync_polarity = 1;
+ 		video->de_polarity = 1;
+ 		video->underflow_color = p->lcdc.underflow_clr;
++		video->border_color = p->lcdc.border_clr;
+ 	} else if (cfg.type == MDP3_DMA_OUTPUT_SEL_DSI_CMD) {
+ 		cfg.dsi_cmd.primary_dsi_cmd_id = 0;
+ 		cfg.dsi_cmd.secondary_dsi_cmd_id = 1;
+diff --git a/drivers/video/msm/mdss/mdp3_dma.c b/drivers/video/msm/mdss/mdp3_dma.c
+index b8c2a63..91ff35a 100644
+--- a/drivers/video/msm/mdss/mdp3_dma.c
++++ b/drivers/video/msm/mdss/mdp3_dma.c
+@@ -1,4 +1,4 @@
+-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
++/* Copyright (c) 2013-2014, 2016, The Linux Foundation. All rights reserved.
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 and
+@@ -1171,6 +1171,7 @@ int dsi_video_config(struct mdp3_intf *intf, struct mdp3_intf_cfg *cfg)
+ 	MDP3_REG_WRITE(MDP3_REG_DSI_VIDEO_VSYNC_PULSE_WIDTH,
+ 			v->vsync_pulse_width);
+ 	temp = v->display_start_x | (v->display_end_x << 16);
++
+ 	MDP3_REG_WRITE(MDP3_REG_DSI_VIDEO_DISPLAY_HCTL, temp);
+ 	MDP3_REG_WRITE(MDP3_REG_DSI_VIDEO_DISPLAY_V_START, v->display_start_y);
+ 	MDP3_REG_WRITE(MDP3_REG_DSI_VIDEO_DISPLAY_V_END, v->display_end_y);
+@@ -1195,6 +1196,7 @@ int dsi_video_config(struct mdp3_intf *intf, struct mdp3_intf_cfg *cfg)
+ 	MDP3_REG_WRITE(MDP3_REG_DSI_VIDEO_CTL_POLARITY, temp);
+ 
+ 	v->underflow_color |= 0x80000000;
++	MDP3_REG_WRITE(MDP3_REG_DSI_VIDEO_BORDER_COLOR, v->border_color);
+ 	MDP3_REG_WRITE(MDP3_REG_DSI_VIDEO_UNDERFLOW_CTL, v->underflow_color);
+ 
+ 	return 0;
+diff --git a/drivers/video/msm/mdss/mdp3_dma.h b/drivers/video/msm/mdss/mdp3_dma.h
+index 302344f..fe4f3f4 100644
+--- a/drivers/video/msm/mdss/mdp3_dma.h
++++ b/drivers/video/msm/mdss/mdp3_dma.h
+@@ -1,4 +1,4 @@
+-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
++/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 and
+@@ -355,6 +355,7 @@ struct mdp3_video_intf_cfg {
+ 	int vsync_polarity;
+ 	int de_polarity;
+ 	int underflow_color;
++	int border_color;
+ };
+ 
+ struct mdp3_dsi_cmd_intf_cfg {
+diff --git a/drivers/video/msm/mdss/mdss_dsi_host.c b/drivers/video/msm/mdss/mdss_dsi_host.c
+index 762cb55..d6931b3 100644
+--- a/drivers/video/msm/mdss/mdss_dsi_host.c
++++ b/drivers/video/msm/mdss/mdss_dsi_host.c
+@@ -1060,8 +1060,11 @@ static void mdss_dsi_mode_setup(struct mdss_panel_data *pdata)
+ 	height = pdata->panel_info.yres;
+ 
+ 	if (pdata->panel_info.type == MIPI_VIDEO_PANEL) {
+-		dummy_xres = pdata->panel_info.lcdc.xres_pad;
+-		dummy_yres = pdata->panel_info.lcdc.yres_pad;
++		dummy_xres = mult_frac((pdata->panel_info.lcdc.border_left +
++				pdata->panel_info.lcdc.border_right),
++				dst_bpp, pdata->panel_info.bpp);
++		dummy_yres = pdata->panel_info.lcdc.border_top +
++				pdata->panel_info.lcdc.border_bottom;
+ 	}
+ 
+ 	vsync_period = vspw + vbp + height + dummy_yres + vfp;
+diff --git a/drivers/video/msm/mdss/mdss_dsi_panel.c b/drivers/video/msm/mdss/mdss_dsi_panel.c
+index b168769..a5311ee 100644
+--- a/drivers/video/msm/mdss/mdss_dsi_panel.c
++++ b/drivers/video/msm/mdss/mdss_dsi_panel.c
+@@ -1491,15 +1491,23 @@ static int mdss_panel_parse_dt(struct device_node *np,
+ 		"qcom,mdss-pan-physical-height-dimension", &tmp);
+ 	pinfo->physical_height = (!rc ? tmp : 0);
+ 	rc = of_property_read_u32(np, "qcom,mdss-dsi-h-left-border", &tmp);
+-	pinfo->lcdc.xres_pad = (!rc ? tmp : 0);
++	pinfo->lcdc.border_left = (!rc ? tmp : 0);
+ 	rc = of_property_read_u32(np, "qcom,mdss-dsi-h-right-border", &tmp);
+ 	if (!rc)
+-		pinfo->lcdc.xres_pad += tmp;
++		pinfo->lcdc.border_right = tmp;
++
++	pinfo->lcdc.xres_pad = (pinfo->lcdc.border_left +
++				pinfo->lcdc.border_right);
++
+ 	rc = of_property_read_u32(np, "qcom,mdss-dsi-v-top-border", &tmp);
+-	pinfo->lcdc.yres_pad = (!rc ? tmp : 0);
++	pinfo->lcdc.border_top = (!rc ? tmp : 0);
+ 	rc = of_property_read_u32(np, "qcom,mdss-dsi-v-bottom-border", &tmp);
+ 	if (!rc)
+-		pinfo->lcdc.yres_pad += tmp;
++		pinfo->lcdc.border_bottom = tmp;
++
++	pinfo->lcdc.yres_pad = (pinfo->lcdc.border_top +
++				pinfo->lcdc.border_bottom);
++
+ 	rc = of_property_read_u32(np, "qcom,mdss-dsi-bpp", &tmp);
+ 	if (rc) {
+ 		pr_err("%s:%d, bpp not specified\n", __func__, __LINE__);
+diff --git a/drivers/video/msm/mdss/mdss_mdp.h b/drivers/video/msm/mdss/mdss_mdp.h
+index cc26cce..eb4a19c 100644
+--- a/drivers/video/msm/mdss/mdss_mdp.h
++++ b/drivers/video/msm/mdss/mdss_mdp.h
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
++ * Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 and
+@@ -206,6 +206,8 @@ struct mdss_mdp_ctl {
+ 
+ 	u16 width;
+ 	u16 height;
++	u16 border_x_off;
++	u16 border_y_off;
+ 	u32 dst_format;
+ 	bool is_secure;
+ 
+@@ -735,7 +737,18 @@ static inline bool mdss_mdp_ctl_is_power_on_lp(struct mdss_mdp_ctl *ctl)
+ static inline u32 left_lm_w_from_mfd(struct msm_fb_data_type *mfd)
+ {
+ 	struct mdss_mdp_ctl *ctl = mfd_to_ctl(mfd);
+-	return (ctl && ctl->mixer_left) ? ctl->mixer_left->width : 0;
++	struct mdss_panel_info *pinfo = mfd->panel_info;
++	int width = 0;
++
++	if (ctl && ctl->mixer_left) {
++		width =  ctl->mixer_left->width;
++		width -= (pinfo->lcdc.border_left + pinfo->lcdc.border_right);
++		pr_debug("ctl=%d mw=%d l=%d r=%d w=%d\n",
++			ctl->num, ctl->mixer_left->width,
++			pinfo->lcdc.border_left, pinfo->lcdc.border_right,
++			width);
++	}
++	return width;
+ }
+ 
+ static inline uint8_t pp_vig_csc_pipe_val(struct mdss_mdp_pipe *pipe)
+diff --git a/drivers/video/msm/mdss/mdss_mdp_ctl.c b/drivers/video/msm/mdss/mdss_mdp_ctl.c
+index 100f5b4..62a45237 100644
+--- a/drivers/video/msm/mdss/mdss_mdp_ctl.c
++++ b/drivers/video/msm/mdss/mdss_mdp_ctl.c
+@@ -438,6 +438,24 @@ exit:
+ 	return;
+ }
+ 
++static inline u32 get_panel_yres(struct mdss_panel_info *pinfo)
++{
++	u32 yres;
++
++	yres = pinfo->yres + pinfo->lcdc.border_top +
++				pinfo->lcdc.border_bottom;
++	return yres;
++}
++
++static inline u32 get_panel_xres(struct mdss_panel_info *pinfo)
++{
++	u32 xres;
++
++	xres = pinfo->xres + pinfo->lcdc.border_left +
++				pinfo->lcdc.border_right;
++	return xres;
++}
++
+ /**
+  * mdss_mdp_perf_calc_pipe() - calculate performance numbers required by pipe
+  * @pipe:	Source pipe struct containing updated pipe params
+@@ -496,7 +514,7 @@ int mdss_mdp_perf_calc_pipe(struct mdss_mdp_pipe *pipe,
+ 			fps = mdss_panel_get_framerate(pinfo);
+ 			v_total = mdss_panel_get_vtotal(pinfo);
+ 		}
+-		xres = pinfo->xres;
++		xres = get_panel_xres(pinfo);
+ 		is_fbc = pinfo->fbc.enabled;
+ 		h_total = mdss_panel_get_htotal(pinfo, false);
+ 	} else {
+@@ -1826,6 +1844,8 @@ static inline int mdss_mdp_set_split_ctl(struct mdss_mdp_ctl *ctl,
+ 		struct mdss_mdp_ctl *split_ctl)
+ {
+ 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
++	struct mdss_panel_info *pinfo;
++
+ 
+ 	if (!ctl || !split_ctl || !mdata)
+ 		return -ENODEV;
+@@ -1833,6 +1853,11 @@ static inline int mdss_mdp_set_split_ctl(struct mdss_mdp_ctl *ctl,
+ 	/* setup split ctl mixer as right mixer of original ctl so that
+ 	 * original ctl can work the same way as dual pipe solution */
+ 	ctl->mixer_right = split_ctl->mixer_left;
++	pinfo = &ctl->panel_data->panel_info;
++
++	/* add x offset from left ctl's border */
++	split_ctl->border_x_off += (pinfo->lcdc.border_left +
++					pinfo->lcdc.border_right);
+ 
+ 	return 0;
+ }
+@@ -1903,9 +1928,9 @@ static inline u32 get_panel_width(struct mdss_mdp_ctl *ctl)
+ {
+ 	u32 width;
+ 
+-	width = ctl->panel_data->panel_info.xres;
+-	width += (ctl->panel_data->next && is_split_dst(ctl->mfd)) ?
+-			ctl->panel_data->next->panel_info.xres : 0;
++	width = get_panel_xres(&ctl->panel_data->panel_info);
++	if (ctl->panel_data->next && is_split_dst(ctl->mfd))
++		width += get_panel_xres(&ctl->panel_data->next->panel_info);
+ 
+ 	return width;
+ }
+@@ -1916,16 +1941,20 @@ int mdss_mdp_ctl_setup(struct mdss_mdp_ctl *ctl)
+ 	u32 width, height;
+ 	int split_fb;
+ 	u32 max_mixer_width;
++	struct mdss_panel_info *pinfo;
+ 
+ 	if (!ctl || !ctl->panel_data) {
+ 		pr_err("invalid ctl handle\n");
+ 		return -ENODEV;
+ 	}
+ 
++	pinfo = &ctl->panel_data->panel_info;
++
+ 	split_ctl = mdss_mdp_get_split_ctl(ctl);
+ 
+ 	width = get_panel_width(ctl);
+-	height = ctl->panel_data->panel_info.yres;
++	height = get_panel_yres(pinfo);
++
+ 	max_mixer_width = ctl->mdata->max_mixer_width;
+ 
+ 	split_fb = (ctl->mfd->split_fb_left &&
+@@ -1959,10 +1988,13 @@ int mdss_mdp_ctl_setup(struct mdss_mdp_ctl *ctl)
+ 		}
+ 	}
+ 
+-	if (split_fb)
++	if (split_fb) {
+ 		width = ctl->mfd->split_fb_left;
+-	else if (width > max_mixer_width)
++		width += (pinfo->lcdc.border_left +
++				pinfo->lcdc.border_right);
++	} else if (width > max_mixer_width) {
+ 		width /= 2;
++	}
+ 
+ 	ctl->mixer_left->width = width;
+ 	ctl->mixer_left->height = height;
+@@ -2061,6 +2093,7 @@ struct mdss_mdp_ctl *mdss_mdp_ctl_init(struct mdss_panel_data *pdata,
+ 	struct mdss_mdp_ctl *ctl;
+ 	struct mdss_data_type *mdata = mfd_to_mdata(mfd);
+ 	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
++	struct mdss_panel_info *pinfo;
+ 
+ 	if (pdata->panel_info.type == WRITEBACK_PANEL)
+ 		offset = mdss_mdp_get_wb_ctl_support(mdata, false);
+@@ -2073,10 +2106,13 @@ struct mdss_mdp_ctl *mdss_mdp_ctl_init(struct mdss_panel_data *pdata,
+ 		return ERR_PTR(-ENOMEM);
+ 	}
+ 
++	pinfo = &pdata->panel_info;
+ 	ctl->mfd = mfd;
+ 	ctl->panel_data = pdata;
+ 	ctl->is_video_mode = false;
+ 	ctl->perf_release_ctl_bw = false;
++	ctl->border_x_off = pinfo->lcdc.border_left;
++	ctl->border_y_off = pinfo->lcdc.border_top;
+ 
+ 	switch (pdata->panel_info.type) {
+ 	case EDP_PANEL:
+@@ -2195,8 +2231,9 @@ int mdss_mdp_ctl_split_display_setup(struct mdss_mdp_ctl *ctl,
+ 		return -ENODEV;
+ 	}
+ 
+-	sctl->width = pdata->panel_info.xres;
+-	sctl->height = pdata->panel_info.yres;
++	sctl->width = get_panel_xres(&pdata->panel_info);
++	sctl->height = get_panel_yres(&pdata->panel_info);
++
+ 	sctl->roi = (struct mdss_rect){0, 0, sctl->width, sctl->height};
+ 
+ 	ctl->mixer_left = mdss_mdp_mixer_alloc(ctl, MDSS_MDP_MIXER_TYPE_INTF,
+diff --git a/drivers/video/msm/mdss/mdss_mdp_intf_video.c b/drivers/video/msm/mdss/mdss_mdp_intf_video.c
+index 9ce6885..a9fc936 100644
+--- a/drivers/video/msm/mdss/mdss_mdp_intf_video.c
++++ b/drivers/video/msm/mdss/mdss_mdp_intf_video.c
+@@ -1197,15 +1197,21 @@ static int mdss_mdp_video_intfs_setup(struct mdss_mdp_ctl *ctl,
+ 
+ 	dst_bpp = pinfo->fbc.enabled ? (pinfo->fbc.target_bpp) : (pinfo->bpp);
+ 
+-	itp.width = mult_frac((pinfo->xres + pinfo->lcdc.xres_pad),
+-				dst_bpp, pinfo->bpp);
+-	itp.height = pinfo->yres + pinfo->lcdc.yres_pad;
++	itp.width = mult_frac((pinfo->xres + pinfo->lcdc.border_left +
++			pinfo->lcdc.border_right), dst_bpp, pinfo->bpp);
++	itp.height = pinfo->yres + pinfo->lcdc.border_top +
++					pinfo->lcdc.border_bottom;
+ 	itp.border_clr = pinfo->lcdc.border_clr;
+ 	itp.underflow_clr = pinfo->lcdc.underflow_clr;
+ 	itp.hsync_skew = pinfo->lcdc.hsync_skew;
+ 
+-	itp.xres = mult_frac(pinfo->xres, dst_bpp, pinfo->bpp);
+-	itp.yres = pinfo->yres;
++	/* tg active area is not work, hence yres should equal to height */
++	itp.xres = mult_frac((pinfo->xres + pinfo->lcdc.border_left +
++			pinfo->lcdc.border_right), dst_bpp, pinfo->bpp);
++
++	itp.yres = pinfo->yres + pinfo->lcdc.border_top +
++				pinfo->lcdc.border_bottom;
++
+ 	itp.h_back_porch = pinfo->lcdc.h_back_porch;
+ 	itp.h_front_porch = pinfo->lcdc.h_front_porch;
+ 	itp.v_back_porch = pinfo->lcdc.v_back_porch;
+diff --git a/drivers/video/msm/mdss/mdss_mdp_overlay.c b/drivers/video/msm/mdss/mdss_mdp_overlay.c
+index d399366..04814e9 100644
+--- a/drivers/video/msm/mdss/mdss_mdp_overlay.c
++++ b/drivers/video/msm/mdss/mdss_mdp_overlay.c
+@@ -1,4 +1,4 @@
+-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
++/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 and
+@@ -904,6 +904,11 @@ int mdss_mdp_overlay_pipe_setup(struct msm_fb_data_type *mfd,
+ 	pipe->dst.w = req->dst_rect.w;
+ 	pipe->dst.h = req->dst_rect.h;
+ 
++	if (mixer->ctl) {
++		pipe->dst.x += mixer->ctl->border_x_off;
++		pipe->dst.y += mixer->ctl->border_y_off;
++	}
++
+ 	pipe->horz_deci = req->horz_deci;
+ 	pipe->vert_deci = req->vert_deci;
+ 
+diff --git a/drivers/video/msm/mdss/mdss_panel.h b/drivers/video/msm/mdss/mdss_panel.h
+index 61452f6..b600ed2 100644
+--- a/drivers/video/msm/mdss/mdss_panel.h
++++ b/drivers/video/msm/mdss/mdss_panel.h
+@@ -1,4 +1,4 @@
+-/* Copyright (c) 2008-2014, The Linux Foundation. All rights reserved.
++/* Copyright (c) 2008-2016, The Linux Foundation. All rights reserved.
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 and
+@@ -227,6 +227,10 @@ struct lcd_panel_info {
+ 	u32 border_clr;
+ 	u32 underflow_clr;
+ 	u32 hsync_skew;
++	u32 border_top;
++	u32 border_bottom;
++	u32 border_left;
++	u32 border_right;
+ 	/* Pad width */
+ 	u32 xres_pad;
+ 	/* Pad height */
+@@ -537,7 +541,9 @@ static inline int mdss_panel_get_vtotal(struct mdss_panel_info *pinfo)
+ {
+ 	return pinfo->yres + pinfo->lcdc.v_back_porch +
+ 			pinfo->lcdc.v_front_porch +
+-			pinfo->lcdc.v_pulse_width;
++			pinfo->lcdc.v_pulse_width+
++			pinfo->lcdc.border_top +
++			pinfo->lcdc.border_bottom;
+ }
+ 
+ /*
+@@ -553,10 +559,11 @@ static inline int mdss_panel_get_vtotal(struct mdss_panel_info *pinfo)
+ static inline int mdss_panel_get_htotal(struct mdss_panel_info *pinfo, bool
+ 		consider_fbc)
+ {
+-	int adj_xres = pinfo->xres;
++	int adj_xres = pinfo->xres + pinfo->lcdc.border_left +
++				pinfo->lcdc.border_right;
+ 
+ 	if (consider_fbc && pinfo->fbc.enabled)
+-		adj_xres = mult_frac(pinfo->xres,
++		adj_xres = mult_frac(adj_xres,
+ 				pinfo->fbc.target_bpp, pinfo->bpp);
+ 
+ 	return adj_xres + pinfo->lcdc.h_back_porch +
+diff --git a/drivers/video/msm/mdss/msm_mdss_io_8974.c b/drivers/video/msm/mdss/msm_mdss_io_8974.c
+index 93c4785..86198dc 100644
+--- a/drivers/video/msm/mdss/msm_mdss_io_8974.c
++++ b/drivers/video/msm/mdss/msm_mdss_io_8974.c
+@@ -1,4 +1,4 @@
+-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
++/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 and
+@@ -633,9 +633,6 @@ int mdss_dsi_clk_div_config(struct mdss_panel_info *panel_info,
+ 	if (ctrl_pdata->refresh_clk_rate || (frame_rate !=
+ 	     panel_info->mipi.frame_rate) ||
+ 	    (!panel_info->clk_rate)) {
+-		h_period += panel_info->lcdc.xres_pad;
+-		v_period += panel_info->lcdc.yres_pad;
+-
+ 		if (lanes > 0) {
+ 			panel_info->clk_rate =
+ 			((h_period * v_period *
+-- 
+cgit v1.1
+
+From 37c4e1b41713484c0a39dc950a316fbb9ecd7b00 Mon Sep 17 00:00:00 2001
+From: Srinivas Dasari <dasaris@qti.qualcomm.com>
+Date: Fri, 7 Jul 2017 01:43:41 +0300
+Subject: cfg80211: Define nla_policy for NL80211_ATTR_LOCAL_MESH_POWER_MODE
+
+Buffer overread may happen as nl80211_set_station() reads 4 bytes
+from the attribute NL80211_ATTR_LOCAL_MESH_POWER_MODE without
+validating the size of data received when userspace sends less
+than 4 bytes of data with NL80211_ATTR_LOCAL_MESH_POWER_MODE.
+Define nla_policy for NL80211_ATTR_LOCAL_MESH_POWER_MODE to avoid
+the buffer overread.
+
+Fixes: 3b1c5a5307f ("{cfg,nl}80211: mesh power mode primitives and userspace access")
+Cc: stable@vger.kernel.org
+Signed-off-by: Srinivas Dasari <dasaris@qti.qualcomm.com>
+Signed-off-by: Jouni Malinen <jouni@qca.qualcomm.com>
+Signed-off-by: Johannes Berg <johannes.berg@intel.com>
+Git-repo: git://git.kernel.org/pub/scm/linux/kernel/git/jberg/mac80211.git
+Git-commit: 8feb69c7bd89513be80eb19198d48f154b254021
+Change-Id: Ie20993309501fd242782311b9fe787931f716116
+CRs-Fixed: 2055013
+Signed-off-by: Srinivas Dasari <dasaris@codeaurora.org>
+---
+ net/wireless/nl80211.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/net/wireless/nl80211.c b/net/wireless/nl80211.c
+index 4db9ee0..8579482 100644
+--- a/net/wireless/nl80211.c
++++ b/net/wireless/nl80211.c
+@@ -366,6 +366,7 @@ static const struct nla_policy nl80211_policy[NL80211_ATTR_MAX+1] = {
+ 	[NL80211_ATTR_SCAN_FLAGS] = { .type = NLA_U32 },
+ 	[NL80211_ATTR_P2P_CTWINDOW] = { .type = NLA_U8 },
+ 	[NL80211_ATTR_P2P_OPPPS] = { .type = NLA_U8 },
++	[NL80211_ATTR_LOCAL_MESH_POWER_MODE] = {. type = NLA_U32 },
+ 	[NL80211_ATTR_ACL_POLICY] = {. type = NLA_U32 },
+ 	[NL80211_ATTR_MAC_ADDRS] = { .type = NLA_NESTED },
+ 	[NL80211_ATTR_STA_CAPABILITY] = { .type = NLA_U16 },
+-- 
+cgit v1.1
+
+From 40ae929c1ad85dccdae7845295745007e5ff29de Mon Sep 17 00:00:00 2001
+From: Bharath Gopal <gopalb@codeaurora.org>
+Date: Mon, 15 May 2017 17:30:23 +0530
+Subject: msm: mdss: Buffer overflow while processing gamut table data
+
+Modified the size of the gamut table data-structure in order to
+avoid a buffer overflow while copying data from user-space.
+
+Change-Id: I8c5fa1caff450a2d25d7859bd159ab4a60045e54
+Signed-off-by: Bharath Gopal <gopalb@codeaurora.org>
+---
+ drivers/video/msm/mdss/mdss_mdp_pp.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/video/msm/mdss/mdss_mdp_pp.c b/drivers/video/msm/mdss/mdss_mdp_pp.c
+index daffc932..e974471 100644
+--- a/drivers/video/msm/mdss/mdss_mdp_pp.c
++++ b/drivers/video/msm/mdss/mdss_mdp_pp.c
+@@ -389,7 +389,7 @@ struct mdss_pp_res_type {
+ 	struct mdp_hist_lut_data enhist_disp_cfg[MDSS_BLOCK_DISP_NUM];
+ 	struct mdp_dither_cfg_data dither_disp_cfg[MDSS_BLOCK_DISP_NUM];
+ 	struct mdp_gamut_cfg_data gamut_disp_cfg[MDSS_BLOCK_DISP_NUM];
+-	uint16_t gamut_tbl[MDSS_BLOCK_DISP_NUM][GAMUT_TOTAL_TABLE_SIZE];
++	uint16_t gamut_tbl[MDSS_BLOCK_DISP_NUM][3 * GAMUT_TOTAL_TABLE_SIZE];
+ 	u32 hist_data[MDSS_BLOCK_DISP_NUM][HIST_V_SIZE];
+ 	struct pp_sts_type pp_disp_sts[MDSS_MAX_MIXER_DISP_NUM];
+ 	/* physical info */
+-- 
+cgit v1.1
+
+From 18b6a0bcf587b4c0d5f8f82e3091b85d0046235b Mon Sep 17 00:00:00 2001
+From: Zhenhua Huang <zhenhuah@codeaurora.org>
+Date: Thu, 24 Sep 2015 09:38:48 +0800
+Subject: power: smb358-charger: Do not set supply type when charger insertion
+
+If APSD(automatic power source detection) is not enabled, usb driver
+will do the charger detection instead SMB358, so do not set supply
+type in chg_uv handler.
+
+Change-Id: Ibfda41e15498a451e072b05be772dd20354bab11
+CRs-Fixed: 909673
+Signed-off-by: Zhenhua Huang <zhenhuah@codeaurora.org>
+---
+ drivers/power/smb358-charger.c | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/drivers/power/smb358-charger.c b/drivers/power/smb358-charger.c
+index f62bde2..be84143 100644
+--- a/drivers/power/smb358-charger.c
++++ b/drivers/power/smb358-charger.c
+@@ -1290,8 +1290,6 @@ static int chg_uv(struct smb358_charger *chip, u8 status)
+ 		chip->chg_present = true;
+ 		dev_dbg(chip->dev, "%s updating usb_psy present=%d",
+ 				__func__, chip->chg_present);
+-		power_supply_set_supply_type(chip->usb_psy,
+-						POWER_SUPPLY_TYPE_USB);
+ 		power_supply_set_present(chip->usb_psy, chip->chg_present);
+ 
+ 		if (chip->bms_controlled_charging) {
+-- 
+cgit v1.1
+
+From ea2537f08537f472b6c3d4f3c45dbb75963f63db Mon Sep 17 00:00:00 2001
+From: Manoj Prabhu B <bmanoj@codeaurora.org>
+Date: Thu, 1 Jun 2017 14:44:16 +0530
+Subject: diag: dci: Add NULL pointer checks for dci buffers
+
+The patch initializes dci peripheral buffers to NULL
+to prevent access before allocation by validating buffer status.
+
+CRs-Fixed: 2048635
+Change-Id: I9be46e751da81cbbbae4fe0333c23101fdbf79ed
+Signed-off-by: Manoj Prabhu B <bmanoj@codeaurora.org>
+---
+ drivers/char/diag/diag_dci.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/char/diag/diag_dci.c b/drivers/char/diag/diag_dci.c
+index cb188b2..76d484a 100644
+--- a/drivers/char/diag/diag_dci.c
++++ b/drivers/char/diag/diag_dci.c
+@@ -2861,6 +2861,8 @@ int diag_dci_register_client(struct diag_dci_reg_tbl_t *reg_entry)
+ 		new_entry->num_buffers = 1;
+ 		break;
+ 	}
++
++	new_entry->buffers = NULL;
+ 	new_entry->real_time = MODE_REALTIME;
+ 	new_entry->in_service = 0;
+ 	INIT_LIST_HEAD(&new_entry->list_write_buf);
+@@ -2934,7 +2936,8 @@ int diag_dci_register_client(struct diag_dci_reg_tbl_t *reg_entry)
+ 
+ fail_alloc:
+ 	if (new_entry) {
+-		for (i = 0; i < new_entry->num_buffers; i++) {
++		for (i = 0; ((i < new_entry->num_buffers) &&
++			new_entry->buffers); i++) {
+ 			proc_buf = &new_entry->buffers[i];
+ 			if (proc_buf) {
+ 				mutex_destroy(&proc_buf->health_mutex);
+-- 
+cgit v1.1
+
+From 14550c68096b0de67764f163f91cdb0b14c7bc83 Mon Sep 17 00:00:00 2001
+From: Naresh Malladi <namall@codeaurora.org>
+Date: Mon, 5 Jun 2017 21:45:45 +0530
+Subject: drivers: soc: qcom: rpm_stats: Add mutex lock for shared data
+
+The buffer allocated in file open operations need to be
+protected as there can be a possiblity of use-after-free
+scenario.
+
+Process A              B
+        |              |
+      open             |
+        |              |
+      read started     |
+        |             close
+
+Add mutex lock to protect the buffer to avoid this.
+
+"msm_rpmstats_copy_stats" accesses the variable "pdata->read_idx"
+without locking. The userspace can invoke the "read" call from
+multiple threads which will call "msm_rpmstats_file_read" which
+in turn calls "msm_rpmstats_copy_stats".
+
+This can allow the statement "pdata->read_idx++" increment
+"read_idx" beyond the limit ("prvdata->num_records") and call
+"msm_rpmstats_read_register" with this value.
+
+Also allow reading RPM stats information using sysfs nodes.
+
+The stats are available at
+	/sys/power/system_sleep/stats
+
+Change-Id: I031f02bb2694a97ced86da0a9f54d0e434e4ad6d
+Signed-off-by: Naresh Malladi <namall@codeaurora.org>
+---
+ drivers/soc/qcom/rpm_master_stat.c | 52 +++++++++++++++++++++++++-------------
+ drivers/soc/qcom/rpm_stats.c       | 49 +++++++++++++++++++++++++++--------
+ 2 files changed, 73 insertions(+), 28 deletions(-)
+
+diff --git a/drivers/soc/qcom/rpm_master_stat.c b/drivers/soc/qcom/rpm_master_stat.c
+index 0a6b648..e4403c5 100644
+--- a/drivers/soc/qcom/rpm_master_stat.c
++++ b/drivers/soc/qcom/rpm_master_stat.c
+@@ -1,4 +1,4 @@
+-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
++/* Copyright (c) 2012-2014, 2017, The Linux Foundation. All rights reserved.
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 and
+@@ -50,6 +50,8 @@
+ 
+ #define GET_FIELD(a) ((strnstr(#a, ".", 80) + 1))
+ 
++static DEFINE_MUTEX(msm_rpm_master_stats_mutex);
++
+ struct msm_rpm_master_stats {
+ 	uint32_t active_cores;
+ 	uint32_t numshutdowns;
+@@ -76,9 +78,11 @@ int msm_rpm_master_stats_file_close(struct inode *inode,
+ {
+ 	struct msm_rpm_master_stats_private_data *private = file->private_data;
+ 
++	mutex_lock(&msm_rpm_master_stats_mutex);
+ 	if (private->reg_base)
+ 		iounmap(private->reg_base);
+ 	kfree(file->private_data);
++	mutex_unlock(&msm_rpm_master_stats_mutex);
+ 
+ 	return 0;
+ }
+@@ -91,14 +95,10 @@ static int msm_rpm_master_copy_stats(
+ 	static int master_cnt;
+ 	int count, j = 0;
+ 	char *buf;
+-	static DEFINE_MUTEX(msm_rpm_master_stats_mutex);
+-
+-	mutex_lock(&msm_rpm_master_stats_mutex);
+ 
+ 	/* Iterate possible number of masters */
+ 	if (master_cnt > prvdata->num_masters - 1) {
+ 		master_cnt = 0;
+-		mutex_unlock(&msm_rpm_master_stats_mutex);
+ 		return 0;
+ 	}
+ 
+@@ -214,7 +214,6 @@ static int msm_rpm_master_copy_stats(
+ 	}
+ 
+ 	master_cnt++;
+-	mutex_unlock(&msm_rpm_master_stats_mutex);
+ 	return RPM_MASTERS_BUF_LEN - count;
+ }
+ 
+@@ -223,25 +222,36 @@ static ssize_t msm_rpm_master_stats_file_read(struct file *file,
+ {
+ 	struct msm_rpm_master_stats_private_data *prvdata;
+ 	struct msm_rpm_master_stats_platform_data *pdata;
++	ssize_t ret;
+ 
++	mutex_lock(&msm_rpm_master_stats_mutex);
+ 	prvdata = file->private_data;
+-	if (!prvdata)
+-		return -EINVAL;
++	if (!prvdata) {
++		ret = -EINVAL;
++		goto exit;
++	}
+ 
+ 	pdata = prvdata->platform_data;
+-	if (!pdata)
+-		return -EINVAL;
++	if (!pdata) {
++		ret = -EINVAL;
++		goto exit;
++	}
+ 
+-	if (!bufu || count == 0)
+-		return -EINVAL;
++	if (!bufu || count == 0) {
++		ret = -EINVAL;
++		goto exit;
++	}
+ 
+ 	if ((*ppos <= pdata->phys_size)) {
+ 		prvdata->len = msm_rpm_master_copy_stats(prvdata);
+ 		*ppos = 0;
+ 	}
+ 
+-	return simple_read_from_buffer(bufu, count, ppos,
++	ret = simple_read_from_buffer(bufu, count, ppos,
+ 			prvdata->buf, prvdata->len);
++exit:
++	mutex_unlock(&msm_rpm_master_stats_mutex);
++	return ret;
+ }
+ 
+ static int msm_rpm_master_stats_file_open(struct inode *inode,
+@@ -249,15 +259,20 @@ static int msm_rpm_master_stats_file_open(struct inode *inode,
+ {
+ 	struct msm_rpm_master_stats_private_data *prvdata;
+ 	struct msm_rpm_master_stats_platform_data *pdata;
++	int ret = 0;
+ 
++	mutex_lock(&msm_rpm_master_stats_mutex);
+ 	pdata = inode->i_private;
+ 
+ 	file->private_data =
+ 		kzalloc(sizeof(struct msm_rpm_master_stats_private_data),
+ 			GFP_KERNEL);
+ 
+-	if (!file->private_data)
+-		return -ENOMEM;
++	if (!file->private_data) {
++		ret = -ENOMEM;
++		goto exit;
++	}
++
+ 	prvdata = file->private_data;
+ 
+ 	prvdata->reg_base = ioremap(pdata->phys_addr_base,
+@@ -268,14 +283,17 @@ static int msm_rpm_master_stats_file_open(struct inode *inode,
+ 		pr_err("%s: ERROR could not ioremap start=%pa, len=%u\n",
+ 			__func__, &pdata->phys_addr_base,
+ 			pdata->phys_size);
+-		return -EBUSY;
++		ret = -EBUSY;
++		goto exit;
+ 	}
+ 
+ 	prvdata->len = 0;
+ 	prvdata->num_masters = pdata->num_masters;
+ 	prvdata->master_names = pdata->masters;
+ 	prvdata->platform_data = pdata;
+-	return 0;
++exit:
++	mutex_unlock(&msm_rpm_master_stats_mutex);
++	return ret;
+ }
+ 
+ static const struct file_operations msm_rpm_master_stats_fops = {
+diff --git a/drivers/soc/qcom/rpm_stats.c b/drivers/soc/qcom/rpm_stats.c
+index af6928c..e9c7992 100644
+--- a/drivers/soc/qcom/rpm_stats.c
++++ b/drivers/soc/qcom/rpm_stats.c
+@@ -1,4 +1,4 @@
+-/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
++/* Copyright (c) 2011-2014, 2017, The Linux Foundation. All rights reserved.
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 and
+@@ -29,6 +29,8 @@
+ #include "rpm_stats.h"
+ 
+ 
++static DEFINE_MUTEX(rpm_stats_mutex);
++
+ enum {
+ 	ID_COUNTER,
+ 	ID_ACCUM_TIME_SCLK,
+@@ -211,6 +213,12 @@ static int msm_rpmstats_copy_stats(struct msm_rpmstats_private_data *pdata)
+ 
+ 	record.id = msm_rpmstats_read_register(pdata->reg_base,
+ 						pdata->read_idx, 1);
++	if (record.id >= ID_MAX) {
++		pr_err("%s: array out of bound error found.\n",
++			__func__);
++		return -EINVAL;
++	}
++
+ 	record.val = msm_rpmstats_read_register(pdata->reg_base,
+ 						pdata->read_idx, 2);
+ 
+@@ -233,13 +241,20 @@ static ssize_t msm_rpmstats_file_read(struct file *file, char __user *bufu,
+ 				  size_t count, loff_t *ppos)
+ {
+ 	struct msm_rpmstats_private_data *prvdata;
++	ssize_t ret;
++
++	mutex_lock(&rpm_stats_mutex);
+ 	prvdata = file->private_data;
+ 
+-	if (!prvdata)
+-		return -EINVAL;
++	if (!prvdata) {
++		ret = -EINVAL;
++		goto exit;
++	}
+ 
+-	if (!bufu || count == 0)
+-		return -EINVAL;
++	if (!bufu || count == 0) {
++		ret = -EINVAL;
++		goto exit;
++	}
+ 
+ 	if (prvdata->platform_data->version == 1) {
+ 		if (!prvdata->num_records)
+@@ -256,22 +271,30 @@ static ssize_t msm_rpmstats_file_read(struct file *file, char __user *bufu,
+ 			*ppos = 0;
+ 	}
+ 
+-	return simple_read_from_buffer(bufu, count, ppos,
++	ret = simple_read_from_buffer(bufu, count, ppos,
+ 			prvdata->buf, prvdata->len);
++exit:
++	mutex_unlock(&rpm_stats_mutex);
++	return ret;
+ }
+ 
+ static int msm_rpmstats_file_open(struct inode *inode, struct file *file)
+ {
+ 	struct msm_rpmstats_private_data *prvdata;
+ 	struct msm_rpmstats_platform_data *pdata;
++	int ret = 0;
+ 
++	mutex_lock(&rpm_stats_mutex);
+ 	pdata = inode->i_private;
+ 
+ 	file->private_data =
+ 		kmalloc(sizeof(struct msm_rpmstats_private_data), GFP_KERNEL);
+ 
+-	if (!file->private_data)
+-		return -ENOMEM;
++	if (!file->private_data) {
++		ret = -ENOMEM;
++		goto exit;
++	}
++
+ 	prvdata = file->private_data;
+ 
+ 	prvdata->reg_base = ioremap_nocache(pdata->phys_addr_base,
+@@ -282,24 +305,28 @@ static int msm_rpmstats_file_open(struct inode *inode, struct file *file)
+ 		pr_err("%s: ERROR could not ioremap start=%pa, len=%u\n",
+ 			__func__, &pdata->phys_addr_base,
+ 			pdata->phys_size);
+-		return -EBUSY;
++		ret = -EBUSY;
++		goto exit;
+ 	}
+ 
+ 	prvdata->read_idx = prvdata->num_records =  prvdata->len = 0;
+ 	prvdata->platform_data = pdata;
+ 	if (pdata->version == 2)
+ 		prvdata->num_records = 2;
+-
+-	return 0;
++exit:
++	mutex_unlock(&rpm_stats_mutex);
++	return ret;
+ }
+ 
+ static int msm_rpmstats_file_close(struct inode *inode, struct file *file)
+ {
+ 	struct msm_rpmstats_private_data *private = file->private_data;
+ 
++	mutex_lock(&rpm_stats_mutex);
+ 	if (private->reg_base)
+ 		iounmap(private->reg_base);
+ 	kfree(file->private_data);
++	mutex_unlock(&rpm_stats_mutex);
+ 
+ 	return 0;
+ }
+-- 
+cgit v1.1
+
+From f3f6c88454fc97a212ba887c96586ab4c12f0726 Mon Sep 17 00:00:00 2001
+From: Pavan Chikkala <pavanc@codeaurora.org>
+Date: Mon, 19 Jun 2017 12:24:02 +0530
+Subject: ASoC: msm: Add app_type to RTAC POPP data
+
+There is a mismatch of the structure used by rtac
+driver in kernel and rtac user space to pass rtac
+popp data. app_type is missing in kernel's structure
+QACT fails to get right device information in
+DSP Calibration mode due to this reason.
+
+Added app_type to kernel's structure
+
+CRs-Fixed: 2062344
+Change-Id: Ib6ccdb6de5e21124f843da4dd68c39e105eab087
+Signed-off-by: Pavan Chikkala <pavanc@codeaurora.org>
+---
+ sound/soc/msm/qdsp6v2/rtac.c | 24 +++++++++++++++++++-----
+ 1 file changed, 19 insertions(+), 5 deletions(-)
+
+diff --git a/sound/soc/msm/qdsp6v2/rtac.c b/sound/soc/msm/qdsp6v2/rtac.c
+index f170589..de209ec 100644
+--- a/sound/soc/msm/qdsp6v2/rtac.c
++++ b/sound/soc/msm/qdsp6v2/rtac.c
+@@ -1,4 +1,4 @@
+-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
++/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 and
+@@ -75,6 +75,7 @@ static struct rtac_apr_data	rtac_voice_apr_data[RTAC_VOICE_MODES];
+ struct rtac_popp_data {
+ 	uint32_t	popp;
+ 	uint32_t	popp_topology;
++	uint32_t	app_type;
+ };
+ 
+ struct rtac_adm_data {
+@@ -376,7 +377,7 @@ done:
+ 
+ 
+ /* ADM Info */
+-void add_popp(u32 dev_idx, u32 port_id, u32 popp_id)
++void add_popp(u32 dev_idx, u32 port_id, u32 popp_id, u32 app_type)
+ {
+ 	u32 i = 0;
+ 
+@@ -392,8 +393,11 @@ void add_popp(u32 dev_idx, u32 port_id, u32 popp_id)
+ 	rtac_adm_data.device[dev_idx].popp[
+ 		rtac_adm_data.device[dev_idx].num_of_popp].popp = popp_id;
+ 	rtac_adm_data.device[dev_idx].popp[
+-		rtac_adm_data.device[dev_idx].num_of_popp++].popp_topology =
++		rtac_adm_data.device[dev_idx].num_of_popp].popp_topology =
+ 		q6asm_get_asm_topology();
++	rtac_adm_data.device[dev_idx].popp[
++		rtac_adm_data.device[dev_idx].num_of_popp++].app_type =
++		app_type;
+ done:
+ 	return;
+ }
+@@ -416,7 +420,7 @@ void rtac_add_adm_device(u32 port_id, u32 copp_id, u32 path_id, u32 popp_id,
+ 		for (; i < rtac_adm_data.num_of_dev; i++) {
+ 			if (rtac_adm_data.device[i].afe_port == port_id &&
+ 			    rtac_adm_data.device[i].copp == copp_id) {
+-				add_popp(i, port_id, popp_id);
++				add_popp(i, port_id, popp_id, app_type);
+ 				goto done;
+ 			}
+ 			if (rtac_adm_data.device[i].num_of_popp ==
+@@ -439,8 +443,10 @@ void rtac_add_adm_device(u32 port_id, u32 copp_id, u32 path_id, u32 popp_id,
+ 	rtac_adm_data.device[i].popp[
+ 		rtac_adm_data.device[i].num_of_popp].popp = popp_id;
+ 	rtac_adm_data.device[i].popp[
+-		rtac_adm_data.device[i].num_of_popp++].popp_topology =
++		rtac_adm_data.device[i].num_of_popp].popp_topology =
+ 		q6asm_get_asm_topology();
++	rtac_adm_data.device[i].popp[
++		rtac_adm_data.device[i].num_of_popp++].app_type = app_type;
+ done:
+ 	mutex_unlock(&rtac_adm_mutex);
+ 	return;
+@@ -469,10 +475,15 @@ static void shift_popp(u32 copp_idx, u32 popp_idx)
+ 			&rtac_adm_data.device[copp_idx].popp[popp_idx + 1].
+ 			popp_topology,
+ 			sizeof(uint32_t));
++		memcpy(&rtac_adm_data.device[copp_idx].popp[popp_idx].app_type,
++			&rtac_adm_data.device[copp_idx].popp[popp_idx + 1].
++			app_type, sizeof(uint32_t));
+ 		memset(&rtac_adm_data.device[copp_idx].popp[popp_idx + 1].
+ 			popp, 0, sizeof(uint32_t));
+ 		memset(&rtac_adm_data.device[copp_idx].popp[popp_idx + 1].
+ 			popp_topology, 0, sizeof(uint32_t));
++		memset(&rtac_adm_data.device[copp_idx].popp[popp_idx + 1].
++			app_type, 0, sizeof(uint32_t));
+ 	}
+ }
+ 
+@@ -514,6 +525,9 @@ void rtac_remove_popp_from_adm_devices(u32 popp_id)
+ 				rtac_adm_data.device[i].popp[j].popp = 0;
+ 				rtac_adm_data.device[i].popp[j].
+ 					popp_topology = 0;
++				rtac_adm_data.device[i].popp[j].
++					app_type = 0;
++
+ 				rtac_adm_data.device[i].num_of_popp--;
+ 				shift_popp(i, j);
+ 			}
+-- 
+cgit v1.1
+
+From 1efc2da0ea53b61649869b9000c10a06ab7111e2 Mon Sep 17 00:00:00 2001
+From: Tony Truong <truong@codeaurora.org>
+Date: Fri, 6 Jan 2017 14:03:03 -0800
+Subject: msm: pcie: add bounds check for debugfs register write
+
+Via debugfs nodes, users have the option to read and write to
+any PCIe register. To ensure clients do not access registers
+outside the PCIe range, add checks to validate the offset clients
+provide.
+
+Change-Id: Ia35cd04c57f01c21a47962be596bca395b5ca247
+Signed-off-by: Tony Truong <truong@codeaurora.org>
+---
+ drivers/pci/host/pci-msm.c | 13 ++++++++++---
+ 1 file changed, 10 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/pci/host/pci-msm.c b/drivers/pci/host/pci-msm.c
+index f6fc378..0f43923 100644
+--- a/drivers/pci/host/pci-msm.c
++++ b/drivers/pci/host/pci-msm.c
+@@ -1,4 +1,4 @@
+-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
++/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 and
+@@ -1413,8 +1413,15 @@ static void msm_pcie_sel_debug_testcase(struct msm_pcie_dev_t *dev,
+ 			dev->res[base_sel - 1].base,
+ 			wr_offset, wr_mask, wr_value);
+ 
+-		msm_pcie_write_reg_field(dev->res[base_sel - 1].base,
+-			wr_offset, wr_mask, wr_value);
++		base_sel_size = resource_size(dev->res[base_sel - 1].resource);
++
++		if (wr_offset >  base_sel_size - 4 ||
++			msm_pcie_check_align(dev, wr_offset))
++			pr_alert("PCIe: RC%d: Invalid wr_offset: 0x%x. wr_offset should be no more than 0x%x\n",
++				dev->rc_idx, wr_offset, base_sel_size - 4);
++		else
++			msm_pcie_write_reg_field(dev->res[base_sel - 1].base,
++				wr_offset, wr_mask, wr_value);
+ 
+ 		break;
+ 	case 13: /* dump all registers of base_sel */
+-- 
+cgit v1.1
+
+From 17ef697b46dbadefb182ac2ccd74ec0a8a1108a5 Mon Sep 17 00:00:00 2001
+From: Krishna Manikandan <mkrishn@codeaurora.org>
+Date: Wed, 28 Jun 2017 13:53:04 +0530
+Subject: fbdev: msm: Allocate fd with O_CLOEXEC flag
+
+When fd is requested during get_metadata call, create fd
+using O_CLOEXEC flag.
+
+CRs-Fixed: 2030638
+Change-Id: I1c874f713a3ebada63ba2c85f021aa78b04af44b
+Signed-off-by: Krishna Manikandan <mkrishn@codeaurora.org>
+---
+ drivers/video/msm/mdss/mdss_mdp_overlay.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/video/msm/mdss/mdss_mdp_overlay.c b/drivers/video/msm/mdss/mdss_mdp_overlay.c
+index c615744..dffc469 100644
+--- a/drivers/video/msm/mdss/mdss_mdp_overlay.c
++++ b/drivers/video/msm/mdss/mdss_mdp_overlay.c
+@@ -3211,9 +3211,10 @@ static int mdss_fb_get_metadata(struct msm_fb_data_type *mfd,
+ 		ret = mdss_fb_get_hw_caps(mfd, &metadata->data.caps);
+ 		break;
+ 	case metadata_op_get_ion_fd:
+-		if (mfd->fb_ion_handle) {
++		if (mfd->fb_ion_handle && mfd->fb_ion_client) {
+ 			metadata->data.fbmem_ionfd =
+-				dma_buf_fd(mfd->fbmem_buf, 0);
++				ion_share_dma_buf_fd(mfd->fb_ion_client,
++					mfd->fb_ion_handle);
+ 			if (metadata->data.fbmem_ionfd < 0)
+ 				pr_err("fd allocation failed. fd = %d\n",
+ 						metadata->data.fbmem_ionfd);
+-- 
+cgit v1.1
+
+From 2d7ace581572524638eb9c0ed916be021af9cf39 Mon Sep 17 00:00:00 2001
+From: Liangliang Lu <luliang@codeaurora.org>
+Date: Fri, 5 May 2017 08:50:32 +0800
+Subject: net: usb: rmnet_usb_ctrl:Make sure list_head operate atomically
+
+Get and delete operation on variables "list_elem" are not atomic.
+Multiple threads may get the same "list_elem", may lead to race
+conditions.
+
+Add mutex in rmnet_ctl_open to resolve current potential race condition
+between test_bit and set_bit.
+
+Change-Id: I00c4e2fd4854ee17a13a0757da98c46a78eee4cb
+Signed-off-by: Liangliang Lu <luliang@codeaurora.org>
+---
+ drivers/net/usb/rmnet_usb_ctrl.c | 32 +++++++++++++++++++++++---------
+ 1 file changed, 23 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/net/usb/rmnet_usb_ctrl.c b/drivers/net/usb/rmnet_usb_ctrl.c
+index 58fd1f6..75e9783 100644
+--- a/drivers/net/usb/rmnet_usb_ctrl.c
++++ b/drivers/net/usb/rmnet_usb_ctrl.c
+@@ -1,4 +1,4 @@
+-/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
++/* Copyright (c) 2011-2014, 2017, The Linux Foundation. All rights reserved.
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 and
+@@ -514,8 +514,13 @@ static int rmnet_ctl_open(struct inode *inode, struct file *file)
+ 	if (!dev)
+ 		return -ENODEV;
+ 
+-	if (test_bit(RMNET_CTRL_DEV_OPEN, &dev->status))
++	mutex_lock(&dev->dev_lock);
++	if (test_bit(RMNET_CTRL_DEV_OPEN, &dev->status)) {
++		mutex_unlock(&dev->dev_lock);
+ 		goto already_opened;
++	}
++	set_bit(RMNET_CTRL_DEV_OPEN, &dev->status);
++	mutex_unlock(&dev->dev_lock);
+ 
+ 	if (dev->mdm_wait_timeout &&
+ 			!test_bit(RMNET_CTRL_DEV_READY, &dev->cudev->status)) {
+@@ -527,10 +532,15 @@ static int rmnet_ctl_open(struct inode *inode, struct file *file)
+ 		if (retval == 0) {
+ 			dev_err(dev->devicep, "%s: Timeout opening %s\n",
+ 						__func__, dev->name);
+-			return -ETIMEDOUT;
+-		} else if (retval < 0) {
++			retval = -ETIMEDOUT;
++		} else if (retval < 0)
+ 			dev_err(dev->devicep, "%s: Error waiting for %s\n",
+ 						__func__, dev->name);
++
++		if (retval < 0) {
++			mutex_lock(&dev->dev_lock);
++			clear_bit(RMNET_CTRL_DEV_OPEN, &dev->status);
++			mutex_unlock(&dev->dev_lock);
+ 			return retval;
+ 		}
+ 	}
+@@ -538,14 +548,15 @@ static int rmnet_ctl_open(struct inode *inode, struct file *file)
+ 	if (!test_bit(RMNET_CTRL_DEV_READY, &dev->cudev->status)) {
+ 		dev_dbg(dev->devicep, "%s: Connection timedout opening %s\n",
+ 					__func__, dev->name);
++		mutex_lock(&dev->dev_lock);
++		clear_bit(RMNET_CTRL_DEV_OPEN, &dev->status);
++		mutex_unlock(&dev->dev_lock);
+ 		return -ETIMEDOUT;
+ 	}
+ 
+ 	/* clear stale data if device close called but channel was ready */
+ 	rmnet_usb_ctrl_free_rx_list(dev);
+ 
+-	set_bit(RMNET_CTRL_DEV_OPEN, &dev->status);
+-
+ 	file->private_data = dev;
+ 
+ already_opened:
+@@ -564,7 +575,9 @@ static int rmnet_ctl_release(struct inode *inode, struct file *file)
+ 
+ 	DBG("%s Called on %s device\n", __func__, dev->name);
+ 
++	mutex_lock(&dev->dev_lock);
+ 	clear_bit(RMNET_CTRL_DEV_OPEN, &dev->status);
++	mutex_unlock(&dev->dev_lock);
+ 
+ 	file->private_data = NULL;
+ 
+@@ -638,6 +651,7 @@ ctrl_read:
+ 
+ 	list_elem = list_first_entry(&dev->rx_list,
+ 				     struct ctrl_pkt_list_elem, list);
++	list_del(&list_elem->list);
+ 	bytes_to_read = (uint32_t)(list_elem->cpkt.data_size);
+ 	if (bytes_to_read > count) {
+ 		spin_unlock_irqrestore(&dev->rx_lock, flags);
+@@ -654,11 +668,11 @@ ctrl_read:
+ 			dev_err(dev->devicep,
+ 				"%s: copy_to_user failed for %s\n",
+ 				__func__, dev->name);
++		spin_lock_irqsave(&dev->rx_lock, flags);
++		list_add(&list_elem->list, &dev->rx_list);
++		spin_unlock_irqrestore(&dev->rx_lock, flags);
+ 		return -EFAULT;
+ 	}
+-	spin_lock_irqsave(&dev->rx_lock, flags);
+-	list_del(&list_elem->list);
+-	spin_unlock_irqrestore(&dev->rx_lock, flags);
+ 
+ 	kfree(list_elem->cpkt.data);
+ 	kfree(list_elem);
+-- 
+cgit v1.1
+
+From 983d46c24e3354b99ddcf0c530e0cee16be9f6c2 Mon Sep 17 00:00:00 2001
+From: Sachin Bhayare <sachin.bhayare@codeaurora.org>
+Date: Fri, 12 May 2017 11:23:38 +0530
+Subject: msm: mdss: Fix possible integer overflow
+
+Avoid possible integer overflow while validating
+mdp3 image parameters.
+
+Change-Id: Ifd972134a23f653cf38134510d98dec5a604d2bc
+CRs-Fixed: 1107055
+Signed-off-by: Sachin Bhayare <sachin.bhayare@codeaurora.org>
+---
+ drivers/video/msm/mdss/mdp3_ppp.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/drivers/video/msm/mdss/mdp3_ppp.c b/drivers/video/msm/mdss/mdp3_ppp.c
+index 0f940d6..726085c 100644
+--- a/drivers/video/msm/mdss/mdp3_ppp.c
++++ b/drivers/video/msm/mdss/mdp3_ppp.c
+@@ -37,6 +37,7 @@
+ #define MDP_PPP_MAX_BPP 4
+ #define MDP_PPP_DYNAMIC_FACTOR 3
+ #define MDP_PPP_MAX_READ_WRITE 3
++#define MDP_PPP_MAX_WIDTH	0xFFF
+ #define ENABLE_SOLID_FILL	0x2
+ #define DISABLE_SOLID_FILL	0x0
+ #define BLEND_LATENCY		3
+@@ -148,6 +149,11 @@ int mdp3_ppp_get_img(struct mdp_img *img, struct mdp_blit_req *req,
+ 		return -EINVAL;
+ 	}
+ 
++	if (img->width > MDP_PPP_MAX_WIDTH) {
++		pr_err("%s incorrect width %d\n", __func__, img->width);
++		return -EINVAL;
++	}
++
+ 	fb_data.flags = img->priv;
+ 	fb_data.memory_id = img->memory_id;
+ 	fb_data.offset = 0;
+-- 
+cgit v1.1
+
 From f44289e9c65bbc3f21d0af493342c0f8500c010e Mon Sep 17 00:00:00 2001
 From: Marcelo Leitner <mleitner@redhat.com>
 Date: Mon, 23 Feb 2015 11:17:13 -0300
